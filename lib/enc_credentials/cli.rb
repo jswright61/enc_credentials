@@ -22,6 +22,7 @@ module EncCredentials
       when "setup" then setup
       when "edit" then edit
       when "show" then show
+      when "diff" then diff_file
       else
         usage
       end
@@ -57,6 +58,8 @@ module EncCredentials
       end
 
       append_gitignore
+      append_gitattributes
+      configure_git_diff_driver
     end
 
     def edit
@@ -92,10 +95,50 @@ module EncCredentials
       end
     end
 
+    def diff_file
+      file = @argv.shift || @credentials_file
+      store = Store.new(file, key_path: @key_file)
+      plaintext = store.read_plaintext
+      print plaintext
+    rescue EncCredentials::KeyError, EncCredentials::DecryptionError => e
+      warn "enc-creds diff: #{e.message}"
+      print File.read(file) if File.exist?(file)
+    end
+
     def validate_yaml!(content)
       YAML.safe_load(content)
     rescue Psych::SyntaxError => e
       abort "YAML syntax error: #{e.message}\nCredentials not saved."
+    end
+
+    def append_gitattributes
+      gitattributes = ".gitattributes"
+      entry = "*.yml.enc diff=enc_credentials\n"
+      if File.exist?(gitattributes)
+        existing = File.read(gitattributes)
+        unless existing.include?("diff=enc_credentials")
+          File.open(gitattributes, "a") { |f| f.write(entry) }
+          puts "Added diff driver entry to .gitattributes"
+        end
+      else
+        File.write(gitattributes, entry)
+        puts "Created .gitattributes with diff driver entry"
+      end
+    end
+
+    def configure_git_diff_driver
+      textconv = if @key_file == KeyResolver::DEFAULT_KEY_FILE
+        "enc-creds diff"
+      else
+        "enc-creds diff -k #{@key_file}"
+      end
+
+      if system("git", "config", "diff.enc_credentials.textconv", textconv, err: File::NULL)
+        puts "Configured git diff driver (diff.enc_credentials.textconv)"
+      else
+        warn "Could not configure git diff driver — run manually:"
+        warn "  git config diff.enc_credentials.textconv '#{textconv}'"
+      end
     end
 
     def append_gitignore
@@ -133,6 +176,7 @@ module EncCredentials
           setup   Generate a new key and empty credentials file
           edit    Open credentials in $EDITOR
           show    Print decrypted credentials to stdout
+          diff    Print decrypted credentials (used as a git textconv driver)
 
         Options:
           -c, --credentials FILE   Credentials file (default: #{Store::DEFAULT_CREDENTIALS_FILE})
