@@ -10,7 +10,7 @@ Gem::Specification.new do |spec|
   spec.description = "Store credentials in an AES-256-GCM encrypted YAML file with key-file or environment-variable key resolution."
   spec.license = "MIT"
 
-  spec.required_ruby_version = ">= 3.1"
+  spec.required_ruby_version = ">= 3.2"
 
   spec.files = Dir["lib/**/*", "bin/*", "LICENSE", "README.md"]
   spec.bindir = "bin"
